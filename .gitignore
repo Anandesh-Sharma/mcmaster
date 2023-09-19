@@ -1,0 +1,10 @@
+# interpreter specific
+__pycache__
+
+
+# environments
+venv 
+
+# local files
+*.log
+*.xlsx
