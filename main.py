@@ -1,44 +1,65 @@
-import time 
-import ssl
-ssl._create_default_https_context = ssl._create_unverified_context
+import os
 
-from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
 from selenium.common.exceptions import NoSuchElementException
-import undetected_chromedriver as uc
-from loguru import logger
-from xpath import *
 
-# Initialize the Chrome WebDriver
-options = webdriver.ChromeOptions()
-# options.add_argument("--headless")  # Optional: Run Selenium in headless mode
+from utils.driver import Driver
+from utils.extract_data import ExtractData
+import xpath as xp
 
-# driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
-driver = uc.Chrome(headless=False, use_subprocess=True)
+class MCMaster(Driver):
+    def __init__(self, family_url):
+        self.d1 = Driver()
+        self.d2 = Driver()
+        self.d3 = Driver()
+        self.family_url = family_url
+        self.family_name = family_url.split('/')[-2] if family_url.endswith('/') else family_url.split('/')[-1]
 
-# Set a maximum wait time (in seconds)
-max_wait_time = 10
-wait = WebDriverWait(driver, max_wait_time)
+    @staticmethod
+    def _get_filepath(family_name, product_url):
+        if product_url.endswith('/'):
+            product_url = product_url[:-1]
+        return os.path.join(
+            family_name, 
+            product_url.replace('https://www.mcmaster.com/products/', '') + '.csv'
+        )
+        
+
+    def get_family(self):
+        self.d1.get(self.family_url)
+        categories = self.d1.driver.find_elements(By.XPATH, xp.CATEGORIES)
+        for i in categories:
+            category_url, category_name = i.get_attribute('href'), i.text.replace(', ', '-').replace(' & ', '-').replace(' ', '-')
+            self.get_categories(category_url, category_name)
+    
+
+    def get_categories(self, category_url):
+        self.d2.get(category_url)
+        products = self.d2.driver.find_elements(By.XPATH, xp.PRODUCTS)
+        for i in products:
+            product_urls = [j.get_attribute('href') for j in i.find_elements(By.XPATH, xp.PRODUCT_URLS)]
+            for product_url in product_urls:
+                self.get_products(product_url)
+                break
 
 
-"""Get the main categories"""
-try:
-    # Navigate to the website
-    driver.get("https://mcmaster.com")
-    time.sleep(10)
-    try:
-        driver.find_element(By.XPATH, '//*[@id="Email"]').send_keys('anandeshsharma@gmail.com')
-        driver.find_element(By.XPATH, '//*[@id="Password"]').send_keys('Rock0004@')
-        driver.find_element(By.XPATH, '//input[@value="Log in"]').click()
-    except NoSuchElementException:
-        logger.info('Skipping logging in')
+    def get_products(self, product_url):
+        self.d3.get(product_url)
+        for table in self.d3.driver.find_elements(By.XPATH, xp.TABLES):
+            try:
+                head = table.find_element(By.XPATH, './thead')
+                body = table.find_element(By.XPATH, './tbody')
+                filepath = self._get_filepath_and_filename(self.family_name, product_url)
+                ed = ExtractData(body=body, head=head, filepath=filepath, product_url=product_url)
+                print(ed.headers)
+                print(ed.body_data)
 
-    categories = driver.find_elements(By.XPATH, CATEGORIES)
-    print(categories)
+            except NoSuchElementException:
+                continue
 
-    time.sleep(100)
 
-finally:
-    # Close the WebDriver when done
-    driver.quit()
+if __name__ == '__main__':
+    mc = MCMaster(
+        family_url='https://www.mcmaster.com/pulling-lifting'
+    )
+    mc.get_family()

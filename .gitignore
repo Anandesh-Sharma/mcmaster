@@ -8,3 +8,8 @@ venv
 # local files
 *.log
 *.xlsx
+*.scrapy
+data
+data_v1
+junk
+cache
